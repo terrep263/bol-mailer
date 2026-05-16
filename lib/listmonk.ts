@@ -2,11 +2,10 @@ import axios from "axios";
 
 const client = axios.create({
   baseURL: process.env.LISTMONK_URL,
-  auth: {
-    username: process.env.LISTMONK_USER!,
-    password: process.env.LISTMONK_PASSWORD!,
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `token ${process.env.LISTMONK_USER}:${process.env.LISTMONK_PASSWORD}`,
   },
-  headers: { "Content-Type": "application/json" },
 });
 
 export interface Subscriber {
