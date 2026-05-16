@@ -60,9 +60,9 @@ export async function getSubscribersByList(listId: number): Promise<Subscriber[]
 
 export async function getSubscriberByEmail(email: string): Promise<Subscriber | null> {
   try {
-    const res = await client.get(`/api/subscribers?query=subscribers.email+%3D+%27${encodeURIComponent(email)}%27&per_page=1`);
-    const results = res.data.data.results || [];
-    return results[0] || null;
+    const res = await client.get(`/api/subscribers?per_page=1000`);
+    const results: Subscriber[] = res.data.data.results || [];
+    return results.find((s) => s.email === email) || null;
   } catch {
     return null;
   }
