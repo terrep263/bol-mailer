@@ -14,6 +14,8 @@ export interface Subscriber {
   name: string;
   attribs: Record<string, any>;
   created_at: string;
+  lists?: any[];
+  status?: string;
 }
 
 export async function getLists(): Promise<{ id: number; name: string }[]> {
@@ -39,8 +41,8 @@ export async function addSubscriber(
   email: string,
   firstName: string,
   listId: number
-): Promise<void> {
-  await client.post("/api/subscribers", {
+): Promise<Subscriber> {
+  const res = await client.post("/api/subscribers", {
     email,
     name: firstName,
     lists: [listId],
@@ -48,6 +50,7 @@ export async function addSubscriber(
     preconfirm_subscriptions: true,
     attribs: {},
   });
+  return res.data.data;
 }
 
 export async function getSubscribersByList(listId: number): Promise<Subscriber[]> {
@@ -57,7 +60,7 @@ export async function getSubscribersByList(listId: number): Promise<Subscriber[]
 
 export async function getSubscriberByEmail(email: string): Promise<Subscriber | null> {
   try {
-    const res = await client.get(`/api/subscribers?query=email='${email}'&per_page=1`);
+    const res = await client.get(`/api/subscribers?query=subscribers.email+%3D+%27${encodeURIComponent(email)}%27&per_page=1`);
     const results = res.data.data.results || [];
     return results[0] || null;
   } catch {
@@ -66,17 +69,15 @@ export async function getSubscriberByEmail(email: string): Promise<Subscriber | 
 }
 
 export async function updateSubscriberAttribs(
-  subscriberId: number,
-  attribs: Record<string, any>
+  subscriber: Subscriber,
+  newAttribs: Record<string, any>
 ): Promise<void> {
-  const res = await client.get(`/api/subscribers?id=${subscriberId}&per_page=1`);
-  const existing = res.data.data.results?.[0];
-  const merged = { ...(existing?.attribs || {}), ...attribs };
-  await client.put(`/api/subscribers/${subscriberId}`, {
-    email: existing.email,
-    name: existing.name,
-    lists: existing.lists?.map((l: any) => l.id) || [],
-    status: existing.status,
+  const merged = { ...(subscriber.attribs || {}), ...newAttribs };
+  await client.put(`/api/subscribers/${subscriber.id}`, {
+    email: subscriber.email,
+    name: subscriber.name,
+    lists: subscriber.lists?.map((l: any) => l.id) || [],
+    status: subscriber.status || "enabled",
     attribs: merged,
   });
 }
