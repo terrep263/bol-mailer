@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
   const created: { name: string; id: number }[] = [];
 
   for (const sequence of SEQUENCES) {
-    const id = await createList(sequence.listName, sequence.name);
+    const id = await createList(sequence.listName);
     created.push({ name: sequence.listName, id });
   }
 
