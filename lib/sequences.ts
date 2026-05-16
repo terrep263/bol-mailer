@@ -1,0 +1,36 @@
+export interface SequenceStep {
+  position: number;
+  delayDays: number;
+  description: string;
+}
+
+export interface Sequence {
+  id: string;
+  name: string;
+  listName: string;
+  brandContext: string;
+  fromEmail: string;
+  fromName: string;
+  targetAction: string;
+  steps: SequenceStep[];
+}
+
+export const SEQUENCES: Sequence[] = [
+  {
+    id: "bol-faith-prelaunch",
+    name: "Book of Lies: Faith — Pre-Launch",
+    listName: "BOL Faith Pre-Launch",
+    brandContext:
+      "The Book of Lies: Faith is a pre-launch book targeting people who feel lied to by the church. The author challenges false religious narratives with compassion and truth. Chapter 1 is available as a free download at thebookoflies.online/chapter-one. The book launches in 30 days.",
+    fromEmail: "hello@thebookoflies.online",
+    fromName: "The Book of Lies",
+    targetAction: "Join the waitlist at thebookoflies.online/waitlist",
+    steps: [
+      { position: 1, delayDays: 0, description: "Welcome + Chapter 1 delivery" },
+      { position: 2, delayDays: 3, description: "Validation — you were not wrong to question" },
+      { position: 3, delayDays: 7, description: "Name the lies — tease the book" },
+      { position: 4, delayDays: 10, description: "Soft pitch — join the waitlist" },
+      { position: 5, delayDays: 14, description: "Final urgency — launch is coming" },
+    ],
+  },
+];
