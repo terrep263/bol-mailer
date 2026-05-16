@@ -21,7 +21,7 @@ export const SEQUENCES: Sequence[] = [
     name: "Book of Lies: Faith — Pre-Launch",
     listName: "BOL Faith Pre-Launch",
     brandContext:
-      "The Book of Lies: Faith is a pre-launch book targeting people who feel lied to by the church. The author challenges false religious narratives with compassion and truth. Chapter 1 is available as a free download at thebookoflies.online/chapter-one. The book launches in 30 days. The author signs all emails as 'the American'.",
+      "88% of Americans don't trust their institutions. 68% don't trust organized religion. Have you ever wondered why? The Book of Lies series has the answers. The Book of Lies: Faith is the first book in the series, targeting people who feel lied to by the church. The author challenges false religious narratives with compassion and truth. Chapter 1 is available as a free download at thebookoflies.online/chapter-one. The book launches in 30 days. The author signs all emails as 'the American'. Always weave the series hook naturally into the email copy.",
     fromEmail: "terrepolite@thebookoflies.online",
     fromName: "the American",
     targetAction: "Join the waitlist at thebookoflies.online/waitlist",
