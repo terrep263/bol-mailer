@@ -44,36 +44,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Sequence not found" }, { status: 404, headers: corsHeaders });
     }
 
-    const listId = await createList(sequence.listName, sequence.name);
+    // Create or get Brevo list
+    const listId = await createList(sequence.listName);
 
-    // Try to add subscriber — if 409 (duplicate) fetch existing
-    let subscriber;
-    try {
-      subscriber = await addSubscriber(email, firstName, listId);
-    } catch (err: any) {
-      if (err?.response?.status === 409) {
-        subscriber = await getSubscriberByEmail(email);
-      } else {
-        throw err;
-      }
-    }
+    // Add subscriber to Brevo
+    await addSubscriber(email, firstName, listId);
 
+    // Fetch subscriber record
+    const subscriber = await getSubscriberByEmail(email);
     if (!subscriber) {
       return NextResponse.json({ success: false, error: "Failed to retrieve subscriber" }, { status: 500, headers: corsHeaders });
     }
 
     // Skip if sequence already complete
-    if (subscriber.attribs?.sequence_complete) {
+    if (subscriber.attribs?.sequence_complete === "true" || subscriber.attribs?.sequence_complete === true) {
       return NextResponse.json({ success: true }, { headers: corsHeaders });
     }
 
     // Set initial sequence attribs
     await updateSubscriberAttribs(subscriber, {
       sequence_id: sequenceId,
-      sequence_step: 0,
+      sequence_step: "0",
       subscribed_at: new Date().toISOString(),
-      sequence_complete: false,
-      previous_emails: [],
+      sequence_complete: "false",
+      previous_emails: "",
     });
 
     // Generate Email 1 via Claude
@@ -85,14 +79,14 @@ export async function POST(req: NextRequest) {
       targetAction: sequence.targetAction,
     });
 
-    // Send via Listmonk
+    // Send via Brevo
     await sendTransactionalEmail(email, email1.subject, email1.body, sequence.fromEmail, sequence.fromName);
 
     // Update attribs after send
     await updateSubscriberAttribs(subscriber, {
-      sequence_step: 1,
+      sequence_step: "1",
       last_sent_at: new Date().toISOString(),
-      previous_emails: [`Subject: ${email1.subject}\n\n${email1.body}`],
+      previous_emails: `Subject: ${email1.subject}\n\n${email1.body}`,
     });
 
     return NextResponse.json({ success: true }, { headers: corsHeaders });
