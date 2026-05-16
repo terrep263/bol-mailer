@@ -12,19 +12,19 @@ export async function GET(req: NextRequest) {
   let processed = 0;
 
   for (const sequence of SEQUENCES) {
-    const listId = await createList(sequence.listName, sequence.name);
+    const listId = await createList(sequence.listName);
     const subscribers = await getSubscribersByList(listId);
 
     for (const subscriber of subscribers) {
       const attribs = subscriber.attribs || {};
 
-      if (attribs.sequence_complete) continue;
+      if (attribs.sequence_complete === "true" || attribs.sequence_complete === true) continue;
 
-      const currentStep: number = attribs.sequence_step || 0;
+      const currentStep: number = parseInt(attribs.sequence_step || "0", 10);
       const nextStep = currentStep + 1;
 
       if (nextStep > sequence.steps.length) {
-        await updateSubscriberAttribs(subscriber, { sequence_complete: true });
+        await updateSubscriberAttribs(subscriber, { sequence_complete: "true" });
         continue;
       }
 
@@ -37,7 +37,9 @@ export async function GET(req: NextRequest) {
       const daysSinceLastSent = (Date.now() - lastSentAt.getTime()) / (1000 * 60 * 60 * 24);
       if (daysSinceLastSent < stepConfig.delayDays) continue;
 
-      const previousEmails: string[] = attribs.previous_emails || [];
+      const previousEmails: string[] = attribs.previous_emails
+        ? [attribs.previous_emails]
+        : [];
 
       const generated = await generateEmail({
         sequencePosition: nextStep,
@@ -55,13 +57,11 @@ export async function GET(req: NextRequest) {
         sequence.fromName
       );
 
-      const updatedPrevious = [...previousEmails, `Subject: ${generated.subject}\n\n${generated.body}`];
-
       await updateSubscriberAttribs(subscriber, {
-        sequence_step: nextStep,
+        sequence_step: String(nextStep),
         last_sent_at: new Date().toISOString(),
-        previous_emails: updatedPrevious,
-        sequence_complete: nextStep >= sequence.steps.length,
+        previous_emails: `${attribs.previous_emails || ""}\n\nSubject: ${generated.subject}\n\n${generated.body}`,
+        sequence_complete: nextStep >= sequence.steps.length ? "true" : "false",
       });
 
       processed++;
