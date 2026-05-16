@@ -91,7 +91,7 @@ export async function sendTransactionalEmail(
 ): Promise<void> {
   await client.post("/api/tx", {
     subscriber_email: email,
-    template_id: 1,
+    template_id: 5,
     data: {
       subject,
       body,
