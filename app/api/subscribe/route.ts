@@ -45,11 +45,24 @@ export async function POST(req: NextRequest) {
     }
 
     const listId = await createList(sequence.listName, sequence.name);
-    await addSubscriber(email, firstName, listId);
+
+    // Try to add subscriber — if 409 (duplicate) just fetch existing
+    try {
+      await addSubscriber(email, firstName, listId);
+    } catch (err: any) {
+      if (err?.response?.status !== 409) throw err;
+      // Subscriber already exists — continue to fetch and re-send
+    }
 
     const subscriber = await getSubscriberByEmail(email);
     if (!subscriber) {
       return NextResponse.json({ success: false, error: "Failed to retrieve subscriber" }, { status: 500, headers: corsHeaders });
+    }
+
+    // Only reset and resend if sequence not already complete
+    const attribs = subscriber.attribs || {};
+    if (attribs.sequence_complete) {
+      return NextResponse.json({ success: true }, { headers: corsHeaders });
     }
 
     await updateSubscriberAttribs(subscriber.id, {
