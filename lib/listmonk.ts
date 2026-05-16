@@ -73,10 +73,12 @@ export async function updateSubscriberAttribs(
   newAttribs: Record<string, any>
 ): Promise<void> {
   const merged = { ...(subscriber.attribs || {}), ...newAttribs };
+  // Extract only integer list IDs for the PUT request
+  const listIds: number[] = (subscriber.lists || []).map((l: any) => typeof l === "number" ? l : l.id).filter((id: any) => typeof id === "number");
   await client.put(`/api/subscribers/${subscriber.id}`, {
     email: subscriber.email,
     name: subscriber.name,
-    lists: subscriber.lists?.map((l: any) => l.id) || [],
+    lists: listIds,
     status: subscriber.status || "enabled",
     attribs: merged,
   });
