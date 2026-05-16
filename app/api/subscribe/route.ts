@@ -46,26 +46,29 @@ export async function POST(req: NextRequest) {
 
     const listId = await createList(sequence.listName, sequence.name);
 
-    // Try to add subscriber — if 409 (duplicate) just fetch existing
+    // Try to add subscriber — if 409 (duplicate) fetch existing
+    let subscriber;
     try {
-      await addSubscriber(email, firstName, listId);
+      subscriber = await addSubscriber(email, firstName, listId);
     } catch (err: any) {
-      if (err?.response?.status !== 409) throw err;
-      // Subscriber already exists — continue to fetch and re-send
+      if (err?.response?.status === 409) {
+        subscriber = await getSubscriberByEmail(email);
+      } else {
+        throw err;
+      }
     }
 
-    const subscriber = await getSubscriberByEmail(email);
     if (!subscriber) {
       return NextResponse.json({ success: false, error: "Failed to retrieve subscriber" }, { status: 500, headers: corsHeaders });
     }
 
-    // Only reset and resend if sequence not already complete
-    const attribs = subscriber.attribs || {};
-    if (attribs.sequence_complete) {
+    // Skip if sequence already complete
+    if (subscriber.attribs?.sequence_complete) {
       return NextResponse.json({ success: true }, { headers: corsHeaders });
     }
 
-    await updateSubscriberAttribs(subscriber.id, {
+    // Set initial sequence attribs
+    await updateSubscriberAttribs(subscriber, {
       sequence_id: sequenceId,
       sequence_step: 0,
       subscribed_at: new Date().toISOString(),
@@ -73,6 +76,7 @@ export async function POST(req: NextRequest) {
       previous_emails: [],
     });
 
+    // Generate Email 1 via Claude
     const email1 = await generateEmail({
       sequencePosition: 1,
       firstName,
@@ -81,9 +85,11 @@ export async function POST(req: NextRequest) {
       targetAction: sequence.targetAction,
     });
 
+    // Send via Listmonk
     await sendTransactionalEmail(email, email1.subject, email1.body, sequence.fromEmail, sequence.fromName);
 
-    await updateSubscriberAttribs(subscriber.id, {
+    // Update attribs after send
+    await updateSubscriberAttribs(subscriber, {
       sequence_step: 1,
       last_sent_at: new Date().toISOString(),
       previous_emails: [`Subject: ${email1.subject}\n\n${email1.body}`],
@@ -91,7 +97,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true }, { headers: corsHeaders });
   } catch (err: any) {
-    console.error(`[subscribe] ${new Date().toISOString()} ERROR:`, err?.message || err);
+    console.error(`[subscribe] ${new Date().toISOString()} ERROR:`, err?.response?.data || err?.message || err);
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500, headers: corsHeaders });
   }
 }
