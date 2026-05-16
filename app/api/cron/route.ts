@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
       const nextStep = currentStep + 1;
 
       if (nextStep > sequence.steps.length) {
-        await updateSubscriberAttribs(subscriber.id, { sequence_complete: true });
+        await updateSubscriberAttribs(subscriber, { sequence_complete: true });
         continue;
       }
 
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 
       const updatedPrevious = [...previousEmails, `Subject: ${generated.subject}\n\n${generated.body}`];
 
-      await updateSubscriberAttribs(subscriber.id, {
+      await updateSubscriberAttribs(subscriber, {
         sequence_step: nextStep,
         last_sent_at: new Date().toISOString(),
         previous_emails: updatedPrevious,
