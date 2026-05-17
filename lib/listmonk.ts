@@ -93,7 +93,7 @@ export async function sendTransactionalEmail(
   fromName: string
 ): Promise<void> {
   await client.post("/smtp/email", {
-    sender: { email: process.env.BREVO_SENDER_EMAIL || "terrep263@gmail.com", name: fromName },
+    sender: { email: fromEmail, name: fromName },
     to: [{ email }],
     subject,
     textContent: body,
