@@ -60,8 +60,22 @@
 | BREVO_SENDER_EMAIL | theamerican@thebookoflies.shop (fallback ref) |
 | ANTHROPIC_API_KEY | Claude AI for dynamic email generation |
 | CRON_SECRET | Protects GET /api/cron — must match header x-cron-secret |
-| NEXT_PUBLIC_SITE_URL | Public app URL |
+| NEXT_PUBLIC_SITE_URL | https://mailer.thebookoflies.online |
 | ZYLVIE_API_KEY | Zylvie API — license key verification only |
+| ZYLVIE_WEBHOOK_SECRET | Set from Zylvie Settings → API/Developers → Webhooks |
+| AWS_ACCESS_KEY_ID | IAM user: productdyno |
+| AWS_SECRET_ACCESS_KEY | IAM user: productdyno |
+| AWS_S3_BUCKET | bookoflies-853537565894-us-east-1-an |
+| AWS_S3_REGION | us-east-1 |
+
+---
+
+## S3 Operations
+
+Claude can upload files to S3 directly via boto3 using credentials from Coolify env vars.
+- Bucket has public read policy set — no ACL needed on upload
+- Upload syntax: no ExtraArgs ACL — just ContentType
+- IAM user: productdyno — has AmazonS3FullAccess policy attached
 
 ---
 
@@ -70,31 +84,20 @@
 ```
 WordPress (thebookoflies.shop)
   └── opt-in form → POST /api/subscribe
+        ↓
+  bol-mailer /api/subscribe
+        ↓
+  Brevo — 5-email pre-launch sequence
 
-/api/subscribe
-  ├── Validates email + firstName + sequenceId
-  ├── Creates/gets Brevo list via createList()
-  ├── Adds subscriber via addSubscriber()
-  ├── Generates Email 1 via Claude (generateEmail())
-  ├── Sends via Brevo sendTransactionalEmail()
-  └── Updates subscriber attribs (sequence_step, last_sent_at)
+Zylvie (checkout.bookoflies.shop)
+  └── purchase → /api/zylvie/webhook ✅ BUILT
+        ↓
+  Brevo — post-purchase sequence
 
-/api/cron (GET, protected by CRON_SECRET header)
-  ├── Loops all SEQUENCES
-  ├── Gets subscribers per list
-  ├── Checks delay days since last send
-  ├── Generates next email via Claude
-  └── Sends + updates attribs
-
-/api/lists/setup (POST)
-  └── Creates Brevo lists for all sequences (idempotent)
-
-/api/zylvie/webhook (POST) — PENDING BUILD
-  ├── Receives Zylvie purchase event
-  ├── Verifies webhook secret
-  ├── Maps product ID → sequence
-  ├── Adds buyer to Brevo list
-  └── Fires post-purchase email sequence
+/api/subscribe — opt-in handler
+/api/cron — daily sequence processor
+/api/zylvie/webhook — purchase handler ✅
+/api/lists/setup — one-time list creation
 ```
 
 ---
@@ -103,14 +106,13 @@ WordPress (thebookoflies.shop)
 
 | File | Purpose |
 |---|---|
-| lib/listmonk.ts | Brevo API client — all contact + send functions |
-| lib/sequences.ts | Sequence definitions (steps, delays, brand context) |
+| lib/listmonk.ts | Brevo API client |
+| lib/sequences.ts | Sequence definitions |
 | lib/claude.ts | Claude AI email generation |
-| app/api/subscribe/route.ts | Opt-in handler — triggers Email 1 |
-| app/api/cron/route.ts | Daily cron — sends sequence steps 2–5 |
-| app/api/lists/setup/route.ts | One-time list creation in Brevo |
-| app/api/zylvie/webhook/route.ts | Zylvie purchase webhook — PENDING BUILD |
-| wordpress-plugin/ | WP plugin for opt-in form integration |
+| app/api/subscribe/route.ts | Opt-in handler |
+| app/api/cron/route.ts | Daily cron |
+| app/api/lists/setup/route.ts | List creation |
+| app/api/zylvie/webhook/route.ts | Zylvie purchase webhook ✅ |
 
 ---
 
@@ -121,16 +123,7 @@ WordPress (thebookoflies.shop)
 |---|---|
 | List Name | BOL Faith Pre-Launch |
 | From | theamerican@thebookoflies.shop / the AMerican |
-| Target Action | Join waitlist at thebookoflies.online/waitlist |
 | Steps | 5 emails over 14 days |
-
-| Step | Delay | Description |
-|---|---|---|
-| 1 | Day 0 | Welcome + Chapter 1 delivery |
-| 2 | Day 3 | Validation — you were not wrong to question |
-| 3 | Day 7 | Name the lies — tease the book |
-| 4 | Day 10 | Soft pitch — join the waitlist |
-| 5 | Day 14 | Final urgency — launch is coming |
 
 ---
 
@@ -140,15 +133,14 @@ WordPress (thebookoflies.shop)
 |---|---|
 | Platform | Zylvie |
 | Zylvie Product ID | D8njKL8ni |
-| Zylvie Product URL | https://checkout.bookoflies.shop/p/book-of-lies-faith |
+| Checkout URL | https://checkout.bookoflies.shop/p/book-of-lies-faith |
+| WordPress Sales Page | https://thebookoflies.shop/book-of-lies-faith/ ✅ LIVE |
 | Price | $27 |
 | Format | PDF + EPUB |
 | PDF URL | https://bookoflies-853537565894-us-east-1-an.s3.us-east-1.amazonaws.com/The+Book+Of+Lies+Faith.pdf |
 | EPUB URL | https://bookoflies-853537565894-us-east-1-an.s3.us-east-1.amazonaws.com/the+book+of+lies+faith.epub |
-| S3 Bucket | bookoflies-853537565894-us-east-1-an |
-| S3 Region | us-east-1 |
-| Webhook endpoint | /api/zylvie/webhook — PENDING BUILD |
-| WordPress sales page | PENDING BUILD — thebookoflies.shop |
+| Workbook URL | https://bookoflies-853537565894-us-east-1-an.s3.us-east-1.amazonaws.com/BookOfLies_Faith_Workbook.pdf |
+| Workbook Price | $17 (upsell in Zylvie) |
 
 ---
 
@@ -157,41 +149,22 @@ WordPress (thebookoflies.shop)
 | Field | Value |
 |---|---|
 | Store URL | https://checkout.bookoflies.shop |
-| Username | bookoflies |
-| Brand name | The Book of Lies |
-| Stripe | Connected ✅ |
 | Plan | Plan 3 (webhooks enabled) |
-| API | License key verification only — no product management API |
+| Stripe | Connected ✅ |
+| Brevo | Connected → BOL Faith Pre-Launch ✅ |
+| DNS | checkout CNAME → domains.zylvie.com ✅ |
+| SSL | Zylvie provisioning — check status |
 
 ---
 
-## CORS
-
-Allowed origins for /api/subscribe:
-- https://thebookoflies.shop
-- https://thebookoflies.online
-
----
-
-## Known Issues / Pending
+## Pending
 
 - [ ] Brevo sender `theamerican@thebookoflies.shop` — verify in Brevo dashboard
-- [ ] Email 1 welcome copy — wire in fixed template (not AI-generated)
-- [ ] CRON_SECRET value — confirm set in Coolify
-- [ ] ZYLVIE_WEBHOOK_SECRET env var — add to Coolify once generated in Zylvie
-- [ ] Build /api/zylvie/webhook endpoint — BTN! pending
-- [ ] Build WordPress sales page on thebookoflies.shop — BTN! pending
-- [ ] Upload PDF + EPUB to Zylvie product
-- [ ] Connect Brevo in Zylvie Settings → Integrations
-- [ ] Rewrite product description around new tagline
-
----
-
-## Brevo IP Whitelist (if needed)
-
-Claude's servers rotate IPs. If Brevo blocks API calls, add to Brevo → Security → Authorised IPs:
-- 35.238.245.102
-- 34.135.250.196
+- [ ] ZYLVIE_WEBHOOK_SECRET — get from Zylvie → Settings → API/Developers → Webhooks and update in Coolify
+- [ ] Upload PDF + EPUB files to Zylvie product (TUS server error — workaround: use S3 URLs directly)
+- [ ] Set up workbook as $17 upsell in Zylvie
+- [ ] Gated page + Success Email in Zylvie product
+- [ ] Verify checkout.bookoflies.shop SSL fully provisioned
 
 ---
 
@@ -199,6 +172,5 @@ Claude's servers rotate IPs. If Brevo blocks API calls, add to Brevo → Securit
 
 - Read this file first, confirm loaded, then wait for instructions
 - Build trigger keyword: **BTN!**
-- No builds, drafts, or code without BTN!
-- All code delivered as push to GitHub — never hand back to Vincent
-- Never ask Vincent to manually edit files, run commands, or check logs unless documented proof it cannot be done
+- All code pushed to GitHub — never handed back to Vincent
+- Never ask Vincent to run commands unless documented proof it cannot be done
