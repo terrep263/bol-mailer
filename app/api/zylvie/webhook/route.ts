@@ -11,59 +11,83 @@ const PRODUCT_SEQUENCE_MAP: Record<string, string> = {
 const PDF_URL = "https://bookoflies-853537565894-us-east-1-an.s3.us-east-1.amazonaws.com/The+Book+Of+Lies+Faith.pdf";
 const EPUB_URL = "https://bookoflies-853537565894-us-east-1-an.s3.us-east-1.amazonaws.com/the+book+of+lies+faith.epub";
 
+function verifySignature(payload: string, signature: string, secret: string): boolean {
+  try {
+    const sig = signature.replace(/^sha256=/, "");
+    const hmac = crypto.createHmac("sha256", secret);
+    hmac.update(payload);
+    const expected = hmac.digest("hex");
+    if (sig.length !== expected.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
+    const webhookSecret = process.env.ZYLVIE_WEBHOOK_SECRET;
 
-    // Log all headers so we can identify Zylvie's signature header
-    const allHeaders: Record<string, string> = {};
-    req.headers.forEach((v, k) => { allHeaders[k] = v; });
-    console.log("Zylvie webhook headers:", JSON.stringify(allHeaders));
-    console.log("Zylvie webhook body:", rawBody.substring(0, 500));
+    // Verify HMAC signature if secret is configured
+    if (webhookSecret && webhookSecret !== "PENDING_SET_FROM_ZYLVIE") {
+      const sig =
+        req.headers.get("x-zylvie-signature") ||
+        req.headers.get("x-signature") ||
+        req.headers.get("x-webhook-signature") ||
+        req.headers.get("x-hub-signature-256") ||
+        "";
+
+      if (sig && !verifySignature(rawBody, sig, webhookSecret)) {
+        console.error("Zylvie webhook signature mismatch");
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+    }
 
     const body = JSON.parse(rawBody);
+    const event = body.event;
+    const data = body.data;
 
-    // Skip non-purchase events
-    const event = body.event || body.type || body.trigger;
-    const skipEvents = ["subscription.cancelled", "refund", "chargeback"];
-    if (event && skipEvents.includes(event)) {
+    // Only process sale events
+    if (event !== "sale") {
       return NextResponse.json({ received: true, skipped: true, event });
     }
 
-    // Extract buyer info
-    const email =
-      body.customer?.email || body.buyer?.email || body.email || body.customer_email;
-    const firstName =
-      body.customer?.first_name ||
-      body.buyer?.first_name ||
-      body.first_name ||
-      body.customer_name?.split(" ")[0] ||
-      "Friend";
-    const productId =
-      body.product?.id || body.product_id || body.base_product || body.item?.id;
+    // Extract buyer info from correct payload path
+    const email = data?.buyer?.email;
+    const firstName = data?.buyer?.first_name || data?.buyer?.name?.split(" ")[0] || "Friend";
+
+    // Get all product IDs from this sale
+    const productIds: string[] = (data?.products || []).map((p: any) => p.id);
 
     if (!email) {
-      console.log("Zylvie validation ping — no email, returning 200");
-      return NextResponse.json({ status: "ok" });
+      console.error("No buyer email in Zylvie payload");
+      return NextResponse.json({ error: "No email in payload" }, { status: 400 });
     }
 
-    // Map product to sequence
-    const sequenceId = productId
-      ? PRODUCT_SEQUENCE_MAP[productId]
-      : Object.values(PRODUCT_SEQUENCE_MAP)[0];
-    const sequence = SEQUENCES.find((s) => s.id === sequenceId);
+    // Find matching sequences for purchased products
+    const matchedSequenceIds = productIds
+      .map((id) => PRODUCT_SEQUENCE_MAP[id])
+      .filter(Boolean);
 
-    if (!sequence) {
-      console.error(`No sequence found for product ${productId}`);
-      return NextResponse.json({ error: "No sequence mapped" }, { status: 400 });
+    // Default to first sequence if no product match (catches test events)
+    if (matchedSequenceIds.length === 0) {
+      const defaultId = Object.values(PRODUCT_SEQUENCE_MAP)[0];
+      matchedSequenceIds.push(defaultId);
     }
 
-    // Add buyer to Brevo list
-    const listId = await createList(sequence.listName);
-    await addSubscriber(email, firstName, listId);
+    const results = [];
 
-    // Send welcome email with download links
-    const emailBody = `${firstName},
+    for (const sequenceId of matchedSequenceIds) {
+      const sequence = SEQUENCES.find((s) => s.id === sequenceId);
+      if (!sequence) continue;
+
+      // Add buyer to Brevo list
+      const listId = await createList(sequence.listName);
+      await addSubscriber(email, firstName, listId);
+
+      // Send welcome email with download links
+      const emailBody = `${firstName},
 
 Your copy of The Book of Lies: Faith is ready.
 
@@ -85,15 +109,18 @@ Welcome to the other side of the lie.
 
 P.S. Over the next two weeks I'll be sending you a few more things. Keep an eye out.`;
 
-    await sendTransactionalEmail(
-      email,
-      "Your copy of The Book of Lies: Faith is ready",
-      emailBody,
-      sequence.fromEmail,
-      sequence.fromName
-    );
+      await sendTransactionalEmail(
+        email,
+        "Your copy of The Book of Lies: Faith is ready",
+        emailBody,
+        sequence.fromEmail,
+        sequence.fromName
+      );
 
-    return NextResponse.json({ success: true, sequence: sequenceId, email });
+      results.push({ sequence: sequenceId, email });
+    }
+
+    return NextResponse.json({ success: true, results });
   } catch (error: any) {
     console.error("Zylvie webhook error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
