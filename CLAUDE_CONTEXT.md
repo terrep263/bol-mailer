@@ -18,6 +18,27 @@
 
 ---
 
+## Brand Identity
+
+| Element | Value |
+|---|---|
+| Brand name | The Book of Lies |
+| Author name | the AMerican |
+| Tagline | "They used your faith against you and told you that was God's will." |
+| Series hook | "They lied to you about Faith. Love. Money. Relationships." |
+| Tone | Confrontational, compassionate, truth-telling, declassified |
+| White | #FFFFFF |
+| Navy | #1B2A4A |
+| Purple | #5B21B6 |
+| Gold | #C9A84C |
+| Red | #CC2936 |
+| Typography | Bold condensed serif (titles), wide-spaced caps (subheadings) |
+| Logo | Eagle shield — gold border, bald eagle, red/white stripes, gold stars, sword |
+| Cover style | White top half (navy type) + deep purple bottom half (white type + eagle shield) |
+| Word mark | "DECLASSIFIED" in wide-spaced caps |
+
+---
+
 ## Email Infrastructure
 
 | Field | Value |
@@ -40,7 +61,7 @@
 | ANTHROPIC_API_KEY | Claude AI for dynamic email generation |
 | CRON_SECRET | Protects GET /api/cron — must match header x-cron-secret |
 | NEXT_PUBLIC_SITE_URL | Public app URL |
-| LISTMONK_URL / LISTMONK_USER / LISTMONK_PASSWORD | Legacy — no longer used, can be removed |
+| ZYLVIE_API_KEY | Zylvie API — license key verification only |
 
 ---
 
@@ -68,12 +89,12 @@ WordPress (thebookoflies.shop)
 /api/lists/setup (POST)
   └── Creates Brevo lists for all sequences (idempotent)
 
-/api/productdyno/webhook (POST) — PENDING BUILD
-  ├── Receives ProductDyno member.created event
-  ├── Verifies secret
+/api/zylvie/webhook (POST) — PENDING BUILD
+  ├── Receives Zylvie purchase event
+  ├── Verifies webhook secret
   ├── Maps product ID → sequence
   ├── Adds buyer to Brevo list
-  └── Fires Email 1 with download links
+  └── Fires post-purchase email sequence
 ```
 
 ---
@@ -88,7 +109,7 @@ WordPress (thebookoflies.shop)
 | app/api/subscribe/route.ts | Opt-in handler — triggers Email 1 |
 | app/api/cron/route.ts | Daily cron — sends sequence steps 2–5 |
 | app/api/lists/setup/route.ts | One-time list creation in Brevo |
-| app/api/productdyno/webhook/route.ts | ProductDyno purchase webhook — PENDING BUILD |
+| app/api/zylvie/webhook/route.ts | Zylvie purchase webhook — PENDING BUILD |
 | wordpress-plugin/ | WP plugin for opt-in form integration |
 
 ---
@@ -117,16 +138,30 @@ WordPress (thebookoflies.shop)
 
 | Field | Value |
 |---|---|
-| Platform | ProductDyno |
+| Platform | Zylvie |
+| Zylvie Product ID | D8njKL8ni |
+| Zylvie Product URL | https://checkout.bookoflies.shop/p/book-of-lies-faith |
 | Price | $27 |
 | Format | PDF + EPUB |
 | PDF URL | https://bookoflies-853537565894-us-east-1-an.s3.us-east-1.amazonaws.com/The+Book+Of+Lies+Faith.pdf |
 | EPUB URL | https://bookoflies-853537565894-us-east-1-an.s3.us-east-1.amazonaws.com/the+book+of+lies+faith.epub |
 | S3 Bucket | bookoflies-853537565894-us-east-1-an |
 | S3 Region | us-east-1 |
-| ProductDyno Product ID | PENDING — retrieve from ProductDyno product URL |
-| Webhook endpoint | /api/productdyno/webhook — PENDING BUILD |
+| Webhook endpoint | /api/zylvie/webhook — PENDING BUILD |
 | WordPress sales page | PENDING BUILD — thebookoflies.shop |
+
+---
+
+## Zylvie Store
+
+| Field | Value |
+|---|---|
+| Store URL | https://checkout.bookoflies.shop |
+| Username | bookoflies |
+| Brand name | The Book of Lies |
+| Stripe | Connected ✅ |
+| Plan | Plan 3 (webhooks enabled) |
+| API | License key verification only — no product management API |
 
 ---
 
@@ -140,21 +175,21 @@ Allowed origins for /api/subscribe:
 
 ## Known Issues / Pending
 
-- [ ] Brevo sender `theamerican@thebookoflies.shop` must be verified in Brevo dashboard
-- [ ] Legacy LISTMONK_* env vars in Coolify can be deleted
+- [ ] Brevo sender `theamerican@thebookoflies.shop` — verify in Brevo dashboard
 - [ ] Email 1 welcome copy — wire in fixed template (not AI-generated)
 - [ ] CRON_SECRET value — confirm set in Coolify
-- [ ] ProductDyno product ID — retrieve from product URL
-- [ ] PRODUCTDYNO_SECRET env var — add to Coolify once generated
-- [ ] Build /api/productdyno/webhook endpoint
-- [ ] Build WordPress sales page on thebookoflies.shop
-- [ ] ProductDyno 500 error on TUS upload — reported to support, using S3 direct URLs as workaround
+- [ ] ZYLVIE_WEBHOOK_SECRET env var — add to Coolify once generated in Zylvie
+- [ ] Build /api/zylvie/webhook endpoint — BTN! pending
+- [ ] Build WordPress sales page on thebookoflies.shop — BTN! pending
+- [ ] Upload PDF + EPUB to Zylvie product
+- [ ] Connect Brevo in Zylvie Settings → Integrations
+- [ ] Rewrite product description around new tagline
 
 ---
 
 ## Brevo IP Whitelist (if needed)
 
-Claude's servers rotate IPs. If Brevo blocks API calls, add these to Brevo → Security → Authorised IPs:
+Claude's servers rotate IPs. If Brevo blocks API calls, add to Brevo → Security → Authorised IPs:
 - 35.238.245.102
 - 34.135.250.196
 
@@ -166,4 +201,4 @@ Claude's servers rotate IPs. If Brevo blocks API calls, add these to Brevo → S
 - Build trigger keyword: **BTN!**
 - No builds, drafts, or code without BTN!
 - All code delivered as push to GitHub — never hand back to Vincent
-- Never ask Vincent to manually edit files, run commands, or check logs unless Claude has documented proof it cannot do it
+- Never ask Vincent to manually edit files, run commands, or check logs unless documented proof it cannot be done
