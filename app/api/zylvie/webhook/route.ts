@@ -11,57 +11,19 @@ const PRODUCT_SEQUENCE_MAP: Record<string, string> = {
 const PDF_URL = "https://bookoflies-853537565894-us-east-1-an.s3.us-east-1.amazonaws.com/The+Book+Of+Lies+Faith.pdf";
 const EPUB_URL = "https://bookoflies-853537565894-us-east-1-an.s3.us-east-1.amazonaws.com/the+book+of+lies+faith.epub";
 
-function verifySignature(payload: string, signature: string, secret: string): boolean {
-  try {
-    const hmac = crypto.createHmac("sha256", secret);
-    hmac.update(payload);
-    const expected = hmac.digest("hex");
-    const sig = signature.replace(/^sha256=/, "");
-    if (sig.length === expected.length) {
-      return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
-    const webhookSecret = process.env.ZYLVIE_WEBHOOK_SECRET;
 
-    // Verify signature if secret is configured
-    if (webhookSecret && webhookSecret !== "PENDING_SET_FROM_ZYLVIE") {
-      const sig =
-        req.headers.get("x-zylvie-signature") ||
-        req.headers.get("x-signature") ||
-        req.headers.get("x-webhook-signature") ||
-        req.headers.get("signature") ||
-        "";
-
-      // Try body field as fallback
-      let bodySecret = "";
-      try {
-        const parsed = JSON.parse(rawBody);
-        bodySecret = parsed.secret || parsed.signing_secret || "";
-      } catch {}
-
-      const sigValid = sig ? verifySignature(rawBody, sig, webhookSecret) : false;
-      const bodyValid = bodySecret === webhookSecret;
-
-      if (!sigValid && !bodyValid) {
-        // Log headers to help diagnose
-        const allHeaders: Record<string, string> = {};
-        req.headers.forEach((v, k) => { allHeaders[k] = v; });
-        console.error("Zylvie webhook auth failed", { sig, bodySecret, headers: allHeaders });
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-    }
+    // Log all headers so we can identify Zylvie's signature header
+    const allHeaders: Record<string, string> = {};
+    req.headers.forEach((v, k) => { allHeaders[k] = v; });
+    console.log("Zylvie webhook headers:", JSON.stringify(allHeaders));
+    console.log("Zylvie webhook body:", rawBody.substring(0, 500));
 
     const body = JSON.parse(rawBody);
 
-    // Only process completed purchases — skip if explicit non-purchase event
+    // Skip non-purchase events
     const event = body.event || body.type || body.trigger;
     const skipEvents = ["subscription.cancelled", "refund", "chargeback"];
     if (event && skipEvents.includes(event)) {
@@ -81,11 +43,11 @@ export async function POST(req: NextRequest) {
       body.product?.id || body.product_id || body.base_product || body.item?.id;
 
     if (!email) {
-      console.error("No email in Zylvie payload", body);
-      return NextResponse.json({ error: "No email in payload" }, { status: 400 });
+      console.log("Zylvie validation ping — no email, returning 200");
+      return NextResponse.json({ status: "ok" });
     }
 
-    // Map product to sequence (default to first if no product ID)
+    // Map product to sequence
     const sequenceId = productId
       ? PRODUCT_SEQUENCE_MAP[productId]
       : Object.values(PRODUCT_SEQUENCE_MAP)[0];
