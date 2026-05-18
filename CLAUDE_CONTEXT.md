@@ -67,6 +67,13 @@ WordPress (thebookoflies.shop)
 
 /api/lists/setup (POST)
   └── Creates Brevo lists for all sequences (idempotent)
+
+/api/productdyno/webhook (POST) — PENDING BUILD
+  ├── Receives ProductDyno member.created event
+  ├── Verifies secret
+  ├── Maps product ID → sequence
+  ├── Adds buyer to Brevo list
+  └── Fires Email 1 with download links
 ```
 
 ---
@@ -81,6 +88,7 @@ WordPress (thebookoflies.shop)
 | app/api/subscribe/route.ts | Opt-in handler — triggers Email 1 |
 | app/api/cron/route.ts | Daily cron — sends sequence steps 2–5 |
 | app/api/lists/setup/route.ts | One-time list creation in Brevo |
+| app/api/productdyno/webhook/route.ts | ProductDyno purchase webhook — PENDING BUILD |
 | wordpress-plugin/ | WP plugin for opt-in form integration |
 
 ---
@@ -105,6 +113,23 @@ WordPress (thebookoflies.shop)
 
 ---
 
+## Book of Lies: Faith — Product
+
+| Field | Value |
+|---|---|
+| Platform | ProductDyno |
+| Price | $27 |
+| Format | PDF + EPUB |
+| PDF URL | https://bookoflies-853537565894-us-east-1-an.s3.us-east-1.amazonaws.com/The+Book+Of+Lies+Faith.pdf |
+| EPUB URL | https://bookoflies-853537565894-us-east-1-an.s3.us-east-1.amazonaws.com/the+book+of+lies+faith.epub |
+| S3 Bucket | bookoflies-853537565894-us-east-1-an |
+| S3 Region | us-east-1 |
+| ProductDyno Product ID | PENDING — retrieve from ProductDyno product URL |
+| Webhook endpoint | /api/productdyno/webhook — PENDING BUILD |
+| WordPress sales page | PENDING BUILD — thebookoflies.shop |
+
+---
+
 ## CORS
 
 Allowed origins for /api/subscribe:
@@ -115,11 +140,15 @@ Allowed origins for /api/subscribe:
 
 ## Known Issues / Pending
 
-- [ ] Brevo sender `theamerican@thebookoflies.shop` must be verified in Brevo dashboard before emails send
-- [ ] Legacy LISTMONK_* env vars in Coolify can be deleted (3 duplicates exist)
-- [ ] Email 1 welcome copy — user provided test copy to be wired in as fixed template (not AI-generated)
-- [ ] CRON_SECRET value — confirm it is set and non-empty in Coolify
-- [ ] Opt-in form for free chapter delivery — in progress
+- [ ] Brevo sender `theamerican@thebookoflies.shop` must be verified in Brevo dashboard
+- [ ] Legacy LISTMONK_* env vars in Coolify can be deleted
+- [ ] Email 1 welcome copy — wire in fixed template (not AI-generated)
+- [ ] CRON_SECRET value — confirm set in Coolify
+- [ ] ProductDyno product ID — retrieve from product URL
+- [ ] PRODUCTDYNO_SECRET env var — add to Coolify once generated
+- [ ] Build /api/productdyno/webhook endpoint
+- [ ] Build WordPress sales page on thebookoflies.shop
+- [ ] ProductDyno 500 error on TUS upload — reported to support, using S3 direct URLs as workaround
 
 ---
 
