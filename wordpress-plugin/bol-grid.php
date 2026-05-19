@@ -2,7 +2,7 @@
 /**
  * Plugin Name: BOL Category Grid
  * Description: Renders 1 latest post per category in a true 4-column grid via [bol_grid] shortcode
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: The Book of Lies
  */
 
@@ -11,12 +11,12 @@ if (!defined('ABSPATH')) exit;
 add_shortcode('bol_grid', 'bol_render_category_grid');
 
 function bol_render_category_grid() {
-    // Faith=4, Love=5, Relationships=7, Institutions=9
+    // Faith=4, Love=5, Money=6, Relationships=7, Institutions=9
     $cats = [
-        ['id' => 4,  'label' => 'FAITH',         'slug' => 'faith'],
-        ['id' => 5,  'label' => 'LOVE',          'slug' => 'love'],
-        ['id' => 7,  'label' => 'RELATIONSHIPS', 'slug' => 'relationships'],
-        ['id' => 9,  'label' => 'INSTITUTIONS',  'slug' => 'institutions'],
+        ['id' => 4, 'label' => 'FAITH',         'slug' => 'faith'],
+        ['id' => 5, 'label' => 'LOVE',          'slug' => 'love'],
+        ['id' => 6, 'label' => 'MONEY',         'slug' => 'money'],
+        ['id' => 7, 'label' => 'RELATIONSHIPS', 'slug' => 'relationships'],
     ];
 
     $uid = 'bolgrid' . substr(md5(uniqid()), 0, 6);
