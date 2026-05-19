@@ -2,7 +2,7 @@
 /**
  * Plugin Name: BOL MCP Proxy
  * Description: Token-authenticated MCP endpoint that proxies to the mcp-adapter default server. Connect Claude.ai using a single URL — no headers, no config files.
- * Version: 1.1.0
+ * Version: 1.3.0
  * Author: the AMerican
  * Requires at least: 6.9
  */
@@ -16,100 +16,116 @@ add_action( 'rest_api_init', function () {
 
     register_rest_route( BOL_MCP_PROXY_NAMESPACE, '/' . BOL_MCP_PROXY_ROUTE, [
         'methods'             => 'GET',
-        'callback'            => 'bol_mcp_proxy_sse',
+        'callback'            => 'bol_mcp_proxy_get',
         'permission_callback' => 'bol_mcp_proxy_check_token',
     ] );
 
     register_rest_route( BOL_MCP_PROXY_NAMESPACE, '/' . BOL_MCP_PROXY_ROUTE, [
         'methods'             => 'POST',
-        'callback'            => 'bol_mcp_proxy_handle',
+        'callback'            => 'bol_mcp_proxy_post',
         'permission_callback' => 'bol_mcp_proxy_check_token',
     ] );
 
     register_rest_route( BOL_MCP_PROXY_NAMESPACE, '/' . BOL_MCP_PROXY_ROUTE, [
         'methods'             => 'DELETE',
-        'callback'            => 'bol_mcp_proxy_handle',
+        'callback'            => 'bol_mcp_proxy_post',
         'permission_callback' => 'bol_mcp_proxy_check_token',
     ] );
 
 } );
 
+/**
+ * Token check — URL param, Bearer, or X-API-Key.
+ */
 function bol_mcp_proxy_check_token( WP_REST_Request $request ): bool|WP_Error {
-    $stored_token = defined( 'BOL_MCP_TOKEN' )
-        ? BOL_MCP_TOKEN
-        : get_option( 'bol_mcp_token', '' );
+    $stored = defined( 'BOL_MCP_TOKEN' ) ? BOL_MCP_TOKEN : get_option( 'bol_mcp_token', '' );
 
-    if ( empty( $stored_token ) ) {
-        return new WP_Error( 'no_token_configured', 'BOL_MCP_TOKEN is not configured.', [ 'status' => 500 ] );
+    if ( empty( $stored ) ) {
+        return new WP_Error( 'no_token', 'BOL_MCP_TOKEN not configured.', [ 'status' => 500 ] );
     }
 
-    $url_token = $request->get_param( 'token' );
-    if ( ! empty( $url_token ) && hash_equals( $stored_token, $url_token ) ) {
-        return true;
-    }
+    $candidates = [
+        $request->get_param( 'token' ),
+        trim( str_replace( 'Bearer ', '', (string) $request->get_header( 'authorization' ) ) ),
+        $request->get_header( 'x-api-key' ),
+    ];
 
-    $auth_header = $request->get_header( 'authorization' );
-    if ( ! empty( $auth_header ) ) {
-        $bearer = trim( str_replace( 'Bearer ', '', $auth_header ) );
-        if ( hash_equals( $stored_token, $bearer ) ) {
+    foreach ( $candidates as $candidate ) {
+        if ( ! empty( $candidate ) && hash_equals( $stored, $candidate ) ) {
             return true;
         }
-    }
-
-    $api_key = $request->get_header( 'x-api-key' );
-    if ( ! empty( $api_key ) && hash_equals( $stored_token, $api_key ) ) {
-        return true;
     }
 
     return new WP_Error( 'invalid_token', 'Invalid or missing token.', [ 'status' => 401 ] );
 }
 
-function bol_mcp_proxy_handle( WP_REST_Request $request ) {
-    $admin = get_users( [ 'role' => 'administrator', 'number' => 1 ] );
-    if ( ! empty( $admin ) ) {
-        wp_set_current_user( $admin[0]->ID );
+/**
+ * POST/DELETE — authenticate as admin then proxy to mcp-adapter via rest_do_request.
+ * We hook into determine_current_user to force admin auth for the inner request.
+ */
+function bol_mcp_proxy_post( WP_REST_Request $request ) {
+
+    // Get admin user ID
+    $admins = get_users( [ 'role' => 'administrator', 'number' => 1, 'fields' => 'ID' ] );
+    if ( empty( $admins ) ) {
+        return new WP_REST_Response( [ 'error' => 'No admin user found.' ], 500 );
     }
+    $admin_id = (int) $admins[0];
 
-    $body   = $request->get_body();
-    $method = $request->get_method();
+    // Force this user for the inner request via a high-priority filter
+    $auth_filter = function() use ( $admin_id ) {
+        return $admin_id;
+    };
+    add_filter( 'determine_current_user', $auth_filter, 99 );
+    wp_set_current_user( $admin_id );
 
-    $proxy_request = new WP_REST_Request( $method, '/mcp/mcp-adapter-default-server' );
-    $proxy_request->set_body( $body );
-    $proxy_request->set_header( 'Content-Type', 'application/json' );
+    // Build inner request — forward all headers mcp-adapter needs
+    $inner = new WP_REST_Request( $request->get_method(), '/mcp/mcp-adapter-default-server' );
+    $inner->set_body( $request->get_body() );
+    $inner->set_header( 'Content-Type', 'application/json' );
 
-    // Forward all MCP protocol headers
-    foreach ( [ 'mcp-session-id', 'last-event-id', 'accept' ] as $header ) {
-        $value = $request->get_header( $header );
-        if ( ! empty( $value ) ) {
-            $proxy_request->set_header( $header, $value );
+    foreach ( [ 'Mcp-Session-Id', 'Mcp-Protocol-Version', 'Accept', 'Last-Event-Id' ] as $h ) {
+        $val = $request->get_header( $h );
+        if ( ! empty( $val ) ) {
+            $inner->set_header( $h, $val );
         }
     }
 
-    $response = rest_do_request( $proxy_request );
-    $server   = rest_get_server();
-    $data     = $server->response_to_data( $response, false );
+    $response = rest_do_request( $inner );
 
-    $outer = new WP_REST_Response( $data, $response->get_status() );
+    // Remove our auth filter
+    remove_filter( 'determine_current_user', $auth_filter, 99 );
 
-    // Forward MCP response headers back to client
-    foreach ( $response->get_headers() as $key => $value ) {
-        if ( stripos( $key, 'mcp-' ) === 0 || strtolower( $key ) === 'location' ) {
-            $outer->header( $key, $value );
+    $server = rest_get_server();
+    $data   = $server->response_to_data( $response, false );
+    $outer  = new WP_REST_Response( $data, $response->get_status() );
+
+    // Forward Mcp-Session-Id response header back to Claude
+    $headers = $response->get_headers();
+    foreach ( $headers as $key => $value ) {
+        if ( stripos( $key, 'mcp-' ) === 0 ) {
+            $outer->header( $key, is_array( $value ) ? implode( ', ', $value ) : $value );
         }
     }
 
     return $outer;
 }
 
-function bol_mcp_proxy_sse( WP_REST_Request $request ) {
+/**
+ * GET — health check.
+ */
+function bol_mcp_proxy_get( WP_REST_Request $request ) {
     return new WP_REST_Response( [
         'status'   => 'ok',
         'service'  => 'bol-mcp-proxy',
-        'version'  => '1.1.0',
+        'version'  => '1.3.0',
         'endpoint' => rest_url( BOL_MCP_PROXY_NAMESPACE . '/' . BOL_MCP_PROXY_ROUTE ),
     ], 200 );
 }
 
+/**
+ * Admin settings page.
+ */
 add_action( 'admin_menu', function () {
     add_options_page( 'BOL MCP Proxy', 'BOL MCP Proxy', 'manage_options', 'bol-mcp-proxy', 'bol_mcp_proxy_settings_page' );
 } );
