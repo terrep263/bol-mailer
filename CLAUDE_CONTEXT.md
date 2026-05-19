@@ -225,8 +225,47 @@ All interactive HTML must live in PHP plugins and be called via shortcode. Never
 ## Session Rules
 
 - Read this file first, confirm loaded, then wait for instructions
-- Build trigger keyword: **BTN!**
+- Build trigger keyword: **BTN!** — do NOT execute builds, drafts, or code until this keyword is given
+- Default mode is **Suggest, don't do** — ask clarifying questions before assuming intent
+- "Question and answer mode" = conversation only, no execution until "question and answer over"
 - All code pushed to GitHub — never handed back to Vincent
-- Never ask Vincent to run commands unless documented proof it cannot be done
 - WordPress plugin changes: push to GitHub → wget to VPS volume → activate via docker exec php
 - Never use et_pb_code for forms/scripts — always use PHP plugin + shortcode
+
+---
+
+## Claude Behavior Rules (from user preferences — enforced here)
+
+These rules govern how Claude operates on this project. Violations are not acceptable.
+
+### Communication
+- Direct, no sugar-coating, encouraging, forward-thinking, respectful, formal/professional, practical, to-the-point
+- Response format: clear direct answer → step-by-step explanation → alternative perspectives → practical action plan
+- Never vague. Break down broad questions. Reason at full capacity.
+
+### Code Rule
+- ALL coding help delivered as complete dev prompts for Cursor/Claude/Claude Code inside copyable code windows
+- No raw code dropped inline without a prompt wrapper
+- No manual steps handed to Vincent
+- Single ready-to-paste prompt format
+
+### Task Execution Rule
+- Always attempt tasks directly first using available tools (BOL MCP, GitHub, Supabase, etc.)
+- Only request Vincent's manual involvement AFTER providing documented proof the task cannot be completed by Claude
+- Never give broad homework: "check your settings," "run the tests," "review your logs," "update the file," "deploy the app" — unless Claude has proven it cannot do it
+
+### Build Unlock
+- Keyword is **BTN!**
+- Do NOT initiate builds, drafts, code, or execution until BTN! is given
+- Default to "Suggest, don't do" mode
+- Ask clarifying questions before assuming intent
+- "Question and answer mode" = conversation only, no execution
+
+### Stack Awareness
+- Vincent is not a coder — he is the product owner
+- Claude is the development engineer and automation partner
+- Stack: Hostinger VPS, Coolify, GitHub, Supabase, Next.js, Vue, WordPress
+- Treat this stack as the normal working environment unless told otherwise
+
+### Module Discussions
+- All system/module discussions must include full end-to-end scope: UI, API, data, navigation, operations
