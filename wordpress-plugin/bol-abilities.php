@@ -2,25 +2,32 @@
 /**
  * Plugin Name: BOL Abilities
  * Description: Registers Book of Lies WordPress abilities for the mcp-adapter.
- * Version: 1.3.0
+ * Version: 2.0.0
  * Author: the AMerican
  * Requires at least: 6.9
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-// Hook into rest_api_init at priority 5 — before mcp-adapter at 15
-// so our abilities are registered when wp_abilities_api_init fires
-add_action( 'rest_api_init', 'bol_register_abilities_rest', 5 );
+/**
+ * Step 1: Register the BOL category FIRST.
+ * wp_abilities_api_categories_init fires before wp_abilities_api_init.
+ */
+add_action( 'wp_abilities_api_categories_init', function () {
+    if ( ! function_exists( 'wp_register_ability_category' ) ) return;
+    wp_register_ability_category( 'bol', [
+        'label'       => 'Book of Lies',
+        'description' => 'Abilities for managing The Book of Lies WordPress site.',
+    ] );
+} );
 
-// Also hook init for admin/CLI contexts
-add_action( 'init', 'bol_register_abilities_rest', 20 );
-
-function bol_register_abilities_rest() {
-    static $registered = false;
-    if ( $registered ) return;
+/**
+ * Step 2: Register abilities on wp_abilities_api_init.
+ * This is the ONLY hook where wp_register_ability() works.
+ * Calling it on init, rest_api_init, or any other hook silently returns null.
+ */
+add_action( 'wp_abilities_api_init', function () {
     if ( ! function_exists( 'wp_register_ability' ) ) return;
-    $registered = true;
 
     // ── 1. AUTOBLOG: Read queue ────────────────────────────────────────────
     wp_register_ability( 'bol/autoblog-queue', [
@@ -212,4 +219,5 @@ function bol_register_abilities_rest() {
         },
         'meta' => [ 'mcp' => [ 'public' => true ] ],
     ] );
-}
+
+} );
