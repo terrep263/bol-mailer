@@ -1,14 +1,14 @@
 <?php
 /**
  * Plugin Name: BOL Opt-in Form
- * Description: Book of Lies email opt-in form with Listmonk integration
- * Version: 1.0.0
+ * Description: Book of Lies email opt-in shortcode — posts to mailer.thebookoflies.online via Brevo
+ * Version: 2.0.0
  * Author: The Book of Lies
  */
 
 if (!defined('ABSPATH')) exit;
 
-// Register admin settings
+// ── Admin settings ──────────────────────────────────────────────────────────
 add_action('admin_menu', function () {
     add_options_page('BOL Mailer', 'BOL Mailer', 'manage_options', 'bol-mailer', 'bol_settings_page');
 });
@@ -17,114 +17,143 @@ add_action('admin_init', function () {
     register_setting('bol_mailer_settings', 'bol_mailer_url', ['sanitize_callback' => 'sanitize_text_field']);
 });
 
-function bol_settings_page() {
-    ?>
+function bol_settings_page() { ?>
     <div class="wrap">
         <h1>BOL Mailer Settings</h1>
         <form method="post" action="options.php">
             <?php settings_fields('bol_mailer_settings'); ?>
             <table class="form-table">
                 <tr>
-                    <th scope="row"><label for="bol_mailer_url">Mailer URL</label></th>
+                    <th scope="row"><label for="bol_mailer_url">Mailer Base URL</label></th>
                     <td>
                         <input type="url" id="bol_mailer_url" name="bol_mailer_url"
                             value="<?php echo esc_attr(get_option('bol_mailer_url', 'https://mailer.thebookoflies.online')); ?>"
                             class="regular-text" />
+                        <p class="description">e.g. https://mailer.thebookoflies.online (no trailing slash)</p>
                     </td>
                 </tr>
             </table>
             <?php submit_button(); ?>
         </form>
     </div>
-    <?php
-}
+<?php }
 
-// Register shortcode
+// ── Enqueue styles once ──────────────────────────────────────────────────────
+add_action('wp_enqueue_scripts', function () {
+    wp_add_inline_style('divi-style', '
+        .bol-optin-wrap { text-align:center; }
+        .bol-optin-row { display:flex; max-width:460px; margin:0 auto 10px auto; gap:0; }
+        .bol-optin-row input[type=email] {
+            flex:1; padding:14px 16px; font-size:15px;
+            background:#ffffff; border:none; color:#111;
+            font-family:Georgia,serif; outline:none;
+            -webkit-appearance:none;
+        }
+        .bol-optin-row input[type=email]::placeholder { color:#999; }
+        .bol-optin-btn {
+            padding:14px 20px; background:#B22234; color:#fff;
+            font-family:"Barlow Condensed",Arial Narrow,sans-serif;
+            font-size:13px; font-weight:900; letter-spacing:.12em;
+            text-transform:uppercase; border:none; cursor:pointer;
+            white-space:nowrap; transition:background .2s;
+        }
+        .bol-optin-btn:hover { background:#9a1e2d; }
+        .bol-optin-btn:disabled { background:#666; cursor:not-allowed; }
+        .bol-optin-fine {
+            font-family:"Barlow Condensed",Arial Narrow,sans-serif;
+            font-size:11px; color:rgba(255,255,255,.35);
+            letter-spacing:.08em; margin:0;
+        }
+        .bol-optin-success {
+            font-family:"Barlow Condensed",Arial Narrow,sans-serif;
+            font-size:16px; font-weight:700; color:#c9a84c;
+            letter-spacing:.1em; margin:12px 0 0; display:none;
+        }
+        .bol-optin-error {
+            font-size:13px; color:#ff6b6b;
+            margin:8px 0 0; display:none;
+        }
+        @media(max-width:520px){
+            .bol-optin-row { flex-direction:column; }
+            .bol-optin-btn { width:100%; }
+        }
+    ');
+});
+
+// ── Shortcode: [bol_optin sequence="bol-faith-prelaunch"] ───────────────────
 add_shortcode('bol_optin', 'bol_render_optin_form');
 
-function bol_render_optin_form() {
-    $mailer_url = esc_url(get_option('bol_mailer_url', 'https://mailer.thebookoflies.online'));
-    $form_id = 'bol-optin-' . uniqid();
-    ob_start();
-    ?>
-    <div id="<?php echo $form_id; ?>" style="background:#0d0d0d;padding:32px;border-radius:8px;max-width:480px;margin:0 auto;font-family:Georgia,serif;">
-        <h3 style="color:#c9a84c;margin:0 0 8px;font-size:1.4rem;">Get Chapter 1 Free</h3>
-        <p style="color:#ccc;margin:0 0 24px;font-size:0.95rem;">Enter your details below and we'll send it straight to your inbox.</p>
+function bol_render_optin_form($atts) {
+    $atts = shortcode_atts([
+        'sequence' => 'bol-faith-prelaunch',
+        'button'   => 'Send Me Chapter 1',
+    ], $atts, 'bol_optin');
 
-        <div class="bol-form-wrap">
-            <input type="text" id="bol-firstname-<?php echo $form_id; ?>" placeholder="First Name"
-                style="width:100%;padding:12px 16px;margin-bottom:12px;background:#1a1a1a;border:1px solid #333;color:#fff;border-radius:4px;font-size:1rem;box-sizing:border-box;" />
+    $mailer_url  = esc_url(rtrim(get_option('bol_mailer_url', 'https://mailer.thebookoflies.online'), '/'));
+    $sequence_id = esc_attr($atts['sequence']);
+    $btn_label   = esc_html($atts['button']);
+    $uid         = 'bol' . substr(md5(uniqid()), 0, 8);
 
-            <input type="email" id="bol-email-<?php echo $form_id; ?>" placeholder="Email Address"
-                style="width:100%;padding:12px 16px;margin-bottom:16px;background:#1a1a1a;border:1px solid #333;color:#fff;border-radius:4px;font-size:1rem;box-sizing:border-box;" />
-
-            <button id="bol-submit-<?php echo $form_id; ?>"
-                style="width:100%;padding:14px;background:#c9a84c;color:#0d0d0d;border:none;border-radius:4px;font-size:1rem;font-weight:bold;cursor:pointer;letter-spacing:0.05em;">
-                SEND ME CHAPTER 1
-            </button>
+    ob_start(); ?>
+    <div class="bol-optin-wrap">
+        <div class="bol-optin-row" id="<?php echo $uid; ?>-row">
+            <input type="email"
+                   id="<?php echo $uid; ?>-email"
+                   placeholder="Your email address"
+                   autocomplete="email" />
+            <button class="bol-optin-btn"
+                    id="<?php echo $uid; ?>-btn"><?php echo $btn_label; ?></button>
         </div>
-
-        <div id="bol-success-<?php echo $form_id; ?>" style="display:none;color:#c9a84c;margin-top:16px;font-size:1rem;">
-            Your chapter is on its way. Check your inbox.
-        </div>
-        <div id="bol-error-<?php echo $form_id; ?>" style="display:none;color:#e74c3c;margin-top:16px;font-size:0.9rem;">
-            Something went wrong. Please try again.
-        </div>
+        <p class="bol-optin-fine" id="<?php echo $uid; ?>-fine">No spam. Unsubscribe anytime.</p>
+        <p class="bol-optin-success" id="<?php echo $uid; ?>-ok">Your chapter is on its way. Check your inbox.</p>
+        <p class="bol-optin-error"  id="<?php echo $uid; ?>-err"></p>
     </div>
-
     <script>
-    (function() {
-        var formId = '<?php echo $form_id; ?>';
-        var mailerUrl = '<?php echo $mailer_url; ?>';
-
-        document.getElementById('bol-submit-' + formId).addEventListener('click', function() {
-            var firstName = document.getElementById('bol-firstname-' + formId).value.trim();
-            var email = document.getElementById('bol-email-' + formId).value.trim();
-            var btn = this;
-
-            document.getElementById('bol-success-' + formId).style.display = 'none';
-            document.getElementById('bol-error-' + formId).style.display = 'none';
-
-            if (!firstName || !email) {
-                document.getElementById('bol-error-' + formId).textContent = 'Please fill in all fields.';
-                document.getElementById('bol-error-' + formId).style.display = 'block';
-                return;
+    (function(){
+        var uid   = '<?php echo $uid; ?>';
+        var url   = '<?php echo $mailer_url; ?>/api/subscribe';
+        var seq   = '<?php echo $sequence_id; ?>';
+        var btn   = document.getElementById(uid+'-btn');
+        var inp   = document.getElementById(uid+'-email');
+        var row   = document.getElementById(uid+'-row');
+        var fine  = document.getElementById(uid+'-fine');
+        var ok    = document.getElementById(uid+'-ok');
+        var err   = document.getElementById(uid+'-err');
+        function send(){
+            var email = inp.value.trim();
+            err.style.display = 'none';
+            if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+                err.textContent = 'Please enter a valid email address.';
+                err.style.display = 'block'; return;
             }
-
-            var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                document.getElementById('bol-error-' + formId).textContent = 'Please enter a valid email address.';
-                document.getElementById('bol-error-' + formId).style.display = 'block';
-                return;
-            }
-
-            btn.disabled = true;
-            btn.textContent = 'SENDING...';
-
-            fetch(mailerUrl + '/api/subscribe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email, firstName: firstName, sequenceId: 'bol-faith-prelaunch' })
+            btn.disabled = true; btn.textContent = 'Sending...';
+            fetch(url, {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({email:email, firstName:'Friend', sequenceId:seq})
             })
-            .then(function(res) { return res.json(); })
-            .then(function(data) {
-                if (data.success) {
-                    document.getElementById('bol-success-' + formId).style.display = 'block';
-                    document.querySelector('#' + formId + ' .bol-form-wrap').style.display = 'none';
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if(d.success){
+                    row.style.display  = 'none';
+                    fine.style.display = 'none';
+                    ok.style.display   = 'block';
                 } else {
-                    document.getElementById('bol-error-' + formId).textContent = 'Something went wrong. Please try again.';
-                    document.getElementById('bol-error-' + formId).style.display = 'block';
-                    btn.disabled = false;
-                    btn.textContent = 'SEND ME CHAPTER 1';
+                    err.textContent    = d.error || 'Something went wrong. Try again.';
+                    err.style.display  = 'block';
+                    btn.disabled       = false;
+                    btn.textContent    = '<?php echo $btn_label; ?>';
                 }
             })
-            .catch(function() {
-                document.getElementById('bol-error-' + formId).textContent = 'Something went wrong. Please try again.';
-                document.getElementById('bol-error-' + formId).style.display = 'block';
-                btn.disabled = false;
-                btn.textContent = 'SEND ME CHAPTER 1';
+            .catch(function(){
+                err.textContent   = 'Connection error. Try again.';
+                err.style.display = 'block';
+                btn.disabled      = false;
+                btn.textContent   = '<?php echo $btn_label; ?>';
             });
-        });
+        }
+        btn.addEventListener('click', send);
+        inp.addEventListener('keydown', function(e){ if(e.key==='Enter') send(); });
     })();
     </script>
     <?php
