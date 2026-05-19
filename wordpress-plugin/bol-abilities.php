@@ -2,7 +2,7 @@
 /**
  * Plugin Name: BOL Abilities
  * Description: Registers Book of Lies WordPress abilities for the mcp-adapter. Gives Claude direct access to autoblog queue, posts, categories, and site status — no terminal required.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: the AMerican
  * Requires at least: 6.9
  */
@@ -10,9 +10,13 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
- * Register all BOL abilities once the Abilities API is ready.
+ * Register all BOL abilities.
+ * Uses init hook with priority 20 to ensure WordPress core and
+ * mcp-adapter are fully loaded before we register.
  */
-add_action( 'wp_abilities_api_init', function () {
+add_action( 'init', function () {
+
+    if ( ! function_exists( 'wp_register_ability' ) ) return;
 
     // ── 1. AUTOBLOG: Read queue ────────────────────────────────────────────
     wp_register_ability( 'bol/autoblog-queue', [
@@ -78,9 +82,9 @@ add_action( 'wp_abilities_api_init', function () {
                     'items' => [
                         'type'       => 'object',
                         'properties' => [
-                            'title'       => [ 'type' => 'string', 'description' => 'Article title' ],
-                            'keyword'     => [ 'type' => 'string', 'description' => 'SEO keyword' ],
-                            'category_id' => [ 'type' => 'integer', 'description' => 'WordPress category ID (Faith=4, Love=5, Money=6, Relationships=7, Institutions=9)' ],
+                            'title'        => [ 'type' => 'string', 'description' => 'Article title' ],
+                            'keyword'      => [ 'type' => 'string', 'description' => 'SEO keyword' ],
+                            'category_id'  => [ 'type' => 'integer', 'description' => 'WordPress category ID (Faith=4, Love=5, Money=6, Relationships=7, Institutions=9)' ],
                             'scheduled_at' => [ 'type' => 'string', 'description' => 'ISO 8601 datetime to publish, or null for immediate' ],
                         ],
                         'required' => [ 'title', 'category_id' ],
@@ -88,13 +92,6 @@ add_action( 'wp_abilities_api_init', function () {
                 ],
             ],
             'required' => [ 'items' ],
-        ],
-        'output_schema' => [
-            'type'       => 'object',
-            'properties' => [
-                'queued' => [ 'type' => 'integer' ],
-                'ids'    => [ 'type' => 'array' ],
-            ],
         ],
         'permission_callback' => function () {
             return current_user_can( 'manage_options' );
@@ -271,7 +268,6 @@ add_action( 'wp_abilities_api_init', function () {
         'execute_callback' => function ( $input ) {
             global $wpdb;
             $query = trim( $input['query'] );
-            // Only allow SELECT
             if ( ! preg_match( '/^SELECT\s/i', $query ) ) {
                 return [ 'error' => 'Only SELECT queries are permitted.' ];
             }
@@ -284,4 +280,4 @@ add_action( 'wp_abilities_api_init', function () {
         'meta' => [ 'mcp' => [ 'public' => true ] ],
     ] );
 
-} );
+}, 20 );
