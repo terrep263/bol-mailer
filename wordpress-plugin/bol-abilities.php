@@ -1,55 +1,37 @@
 <?php
 /**
  * Plugin Name: BOL Abilities
- * Description: Registers Book of Lies WordPress abilities for the mcp-adapter. Gives Claude direct access to autoblog queue, posts, categories, and site status — no terminal required.
- * Version: 1.2.0
+ * Description: Registers Book of Lies WordPress abilities for the mcp-adapter.
+ * Version: 1.3.0
  * Author: the AMerican
  * Requires at least: 6.9
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-/**
- * Register on wp_abilities_api_init — the hook the mcp-adapter fires
- * after it initializes during rest_api_init priority 15.
- * Falls back to init priority 20 for non-REST contexts (admin, CLI).
- */
-add_action( 'wp_abilities_api_init', 'bol_register_abilities', 20 );
-add_action( 'init', function() {
-    // Only fire on non-REST requests so we don't double-register
-    if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) return;
-    if ( ! function_exists( 'wp_register_ability' ) ) return;
-    bol_register_abilities();
-}, 20 );
+// Hook into rest_api_init at priority 5 — before mcp-adapter at 15
+// so our abilities are registered when wp_abilities_api_init fires
+add_action( 'rest_api_init', 'bol_register_abilities_rest', 5 );
 
-function bol_register_abilities() {
+// Also hook init for admin/CLI contexts
+add_action( 'init', 'bol_register_abilities_rest', 20 );
+
+function bol_register_abilities_rest() {
     static $registered = false;
     if ( $registered ) return;
-    $registered = true;
-
     if ( ! function_exists( 'wp_register_ability' ) ) return;
+    $registered = true;
 
     // ── 1. AUTOBLOG: Read queue ────────────────────────────────────────────
     wp_register_ability( 'bol/autoblog-queue', [
         'label'       => 'Autoblog Queue',
-        'description' => 'Read the BOL autoblog queue. Returns all queued, processing, published, and failed items.',
+        'description' => 'Read the BOL autoblog queue. Filter by status (queued/processing/published/failed/all) and limit.',
         'category'    => 'bol',
         'input_schema' => [
             'type'       => 'object',
             'properties' => [
-                'status' => [
-                    'type'        => 'string',
-                    'description' => 'Filter by status: queued, processing, published, failed, or all (default: all)',
-                    'enum'        => [ 'queued', 'processing', 'published', 'failed', 'all' ],
-                    'default'     => 'all',
-                ],
-                'limit' => [
-                    'type'        => 'integer',
-                    'description' => 'Number of items to return (default: 20, max: 100)',
-                    'default'     => 20,
-                    'minimum'     => 1,
-                    'maximum'     => 100,
-                ],
+                'status' => [ 'type' => 'string', 'enum' => ['queued','processing','published','failed','all'], 'default' => 'all' ],
+                'limit'  => [ 'type' => 'integer', 'default' => 20, 'minimum' => 1, 'maximum' => 100 ],
             ],
         ],
         'permission_callback' => function () { return current_user_can( 'manage_options' ); },
@@ -68,26 +50,22 @@ function bol_register_abilities() {
     // ── 2. AUTOBLOG: Add to queue ──────────────────────────────────────────
     wp_register_ability( 'bol/autoblog-queue-add', [
         'label'       => 'Add to Autoblog Queue',
-        'description' => 'Add one or more articles to the BOL autoblog queue for AI generation.',
+        'description' => 'Add articles to the BOL autoblog queue. Faith=4, Love=5, Money=6, Relationships=7, Institutions=9.',
         'category'    => 'bol',
         'input_schema' => [
             'type'       => 'object',
+            'required'   => ['items'],
             'properties' => [
-                'items' => [
-                    'type'  => 'array',
-                    'items' => [
-                        'type'       => 'object',
-                        'properties' => [
-                            'title'        => [ 'type' => 'string' ],
-                            'keyword'      => [ 'type' => 'string' ],
-                            'category_id'  => [ 'type' => 'integer', 'description' => 'Faith=4, Love=5, Money=6, Relationships=7, Institutions=9' ],
-                            'scheduled_at' => [ 'type' => 'string' ],
-                        ],
-                        'required' => [ 'title', 'category_id' ],
+                'items' => [ 'type' => 'array', 'items' => [
+                    'type' => 'object', 'required' => ['title','category_id'],
+                    'properties' => [
+                        'title'        => [ 'type' => 'string' ],
+                        'keyword'      => [ 'type' => 'string' ],
+                        'category_id'  => [ 'type' => 'integer' ],
+                        'scheduled_at' => [ 'type' => 'string' ],
                     ],
-                ],
+                ]],
             ],
-            'required' => [ 'items' ],
         ],
         'permission_callback' => function () { return current_user_can( 'manage_options' ); },
         'execute_callback' => function ( $input ) {
@@ -110,10 +88,10 @@ function bol_register_abilities() {
         'meta' => [ 'mcp' => [ 'public' => true ] ],
     ] );
 
-    // ── 3. AUTOBLOG: Trigger queue manually ───────────────────────────────
+    // ── 3. AUTOBLOG: Trigger queue ─────────────────────────────────────────
     wp_register_ability( 'bol/autoblog-trigger', [
         'label'       => 'Trigger Autoblog Queue',
-        'description' => 'Manually trigger the autoblog queue processor to run now instead of waiting for the 5-minute cron.',
+        'description' => 'Manually fire the autoblog queue processor immediately.',
         'category'    => 'bol',
         'permission_callback' => function () { return current_user_can( 'manage_options' ); },
         'execute_callback' => function ( $input ) {
@@ -126,7 +104,7 @@ function bol_register_abilities() {
         'meta' => [ 'mcp' => [ 'public' => true ] ],
     ] );
 
-    // ── 4. AUTOBLOG: Clear failed items ───────────────────────────────────
+    // ── 4. AUTOBLOG: Clear failed ──────────────────────────────────────────
     wp_register_ability( 'bol/autoblog-clear-failed', [
         'label'       => 'Clear Failed Autoblog Items',
         'description' => 'Delete all failed items from the autoblog queue.',
@@ -140,7 +118,7 @@ function bol_register_abilities() {
         'meta' => [ 'mcp' => [ 'public' => true ] ],
     ] );
 
-    // ── 5. SITE: Active plugins list ──────────────────────────────────────
+    // ── 5. SITE: Active plugins ────────────────────────────────────────────
     wp_register_ability( 'bol/site-plugins', [
         'label'       => 'Active Plugins',
         'description' => 'List all active WordPress plugins on thebookoflies.shop.',
@@ -149,27 +127,27 @@ function bol_register_abilities() {
         'execute_callback' => function ( $input ) {
             $active  = get_option( 'active_plugins', [] );
             $plugins = [];
-            foreach ( $active as $plugin_file ) {
-                $data      = get_plugin_data( WP_PLUGIN_DIR . '/' . $plugin_file );
-                $plugins[] = [ 'file' => $plugin_file, 'name' => $data['Name'], 'version' => $data['Version'] ];
+            foreach ( $active as $f ) {
+                $d = get_plugin_data( WP_PLUGIN_DIR . '/' . $f );
+                $plugins[] = [ 'file' => $f, 'name' => $d['Name'], 'version' => $d['Version'] ];
             }
             return [ 'total' => count( $plugins ), 'plugins' => $plugins ];
         },
         'meta' => [ 'mcp' => [ 'public' => true ] ],
     ] );
 
-    // ── 6. SITE: Cron schedule ────────────────────────────────────────────
+    // ── 6. SITE: Cron schedule ─────────────────────────────────────────────
     wp_register_ability( 'bol/site-cron', [
         'label'       => 'Cron Schedule',
-        'description' => 'List all scheduled WordPress cron events and their next run times.',
+        'description' => 'List all WordPress cron events and their next run times.',
         'category'    => 'bol',
         'permission_callback' => function () { return current_user_can( 'manage_options' ); },
         'execute_callback' => function ( $input ) {
-            $crons  = _get_cron_array();
+            $crons = _get_cron_array();
             $events = [];
-            foreach ( $crons as $timestamp => $hooks ) {
+            foreach ( $crons as $ts => $hooks ) {
                 foreach ( $hooks as $hook => $data ) {
-                    $events[] = [ 'hook' => $hook, 'next_run' => date( 'Y-m-d H:i:s', $timestamp ), 'in' => human_time_diff( $timestamp ) ];
+                    $events[] = [ 'hook' => $hook, 'next_run' => date( 'Y-m-d H:i:s', $ts ), 'in' => human_time_diff( $ts ) ];
                 }
             }
             usort( $events, fn( $a, $b ) => strcmp( $a['next_run'], $b['next_run'] ) );
@@ -178,10 +156,10 @@ function bol_register_abilities() {
         'meta' => [ 'mcp' => [ 'public' => true ] ],
     ] );
 
-    // ── 7. POSTS: Recent posts ────────────────────────────────────────────
+    // ── 7. POSTS: Recent posts ─────────────────────────────────────────────
     wp_register_ability( 'bol/posts-recent', [
         'label'       => 'Recent Posts',
-        'description' => 'Get recent posts with full details including category, status, and word count.',
+        'description' => 'Get recent posts with category, status, and word count.',
         'category'    => 'bol',
         'input_schema' => [
             'type'       => 'object',
@@ -214,21 +192,21 @@ function bol_register_abilities() {
         'meta' => [ 'mcp' => [ 'public' => true ] ],
     ] );
 
-    // ── 8. DB: Read-only query ────────────────────────────────────────────
+    // ── 8. DB: Read-only query ─────────────────────────────────────────────
     wp_register_ability( 'bol/db-query', [
         'label'       => 'Database Read Query',
-        'description' => 'Run a read-only SELECT query against the WordPress database.',
+        'description' => 'Run a SELECT query against the WordPress database.',
         'category'    => 'bol',
         'input_schema' => [
             'type'       => 'object',
+            'required'   => ['query'],
             'properties' => [ 'query' => [ 'type' => 'string' ] ],
-            'required'   => [ 'query' ],
         ],
         'permission_callback' => function () { return current_user_can( 'manage_options' ); },
         'execute_callback' => function ( $input ) {
             global $wpdb;
             $query = trim( $input['query'] );
-            if ( ! preg_match( '/^SELECT\s/i', $query ) ) return [ 'error' => 'Only SELECT queries are permitted.' ];
+            if ( ! preg_match( '/^SELECT\s/i', $query ) ) return [ 'error' => 'Only SELECT queries permitted.' ];
             $rows = $wpdb->get_results( $query, ARRAY_A );
             return [ 'total' => count( $rows ), 'rows' => $rows ];
         },
